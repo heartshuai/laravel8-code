@@ -32,7 +32,7 @@ class ComposerAutoloaderInitc61ff82cbf0142a401a48a8161e1595a
 // 实例化 "ClassLoader" 并将其赋值给 '$loader' 变量和静态变量 'self::$loader'
         self::$loader = $loader = new \Composer\Autoload\ClassLoader(\dirname(__DIR__));
 
-// 使用 'spl_autoload_unregister' 函数取消注册 "ComposerAutoloaderInitc61ff82cbf0142a401a48a8161e1595a" 类的 'loadClassLoader' 方法
+// 使用 'spl_autoload_unregister' 函数取消注册 "ComposerAutoloaderInitc61ff82cbf0142a401a48a8161e1595a" 类的 'loadClassLoader' 方法 提高性能
         spl_autoload_unregister(array('ComposerAutoloaderInitc61ff82cbf0142a401a48a8161e1595a', 'loadClassLoader'));
 
 // 加载并执行 'autoload_static.php' 文件，该文件主要负责加载 Composer 为了提高性能而静态生成的类映射
@@ -56,6 +56,7 @@ class ComposerAutoloaderInitc61ff82cbf0142a401a48a8161e1595a
                 require $file;
             }
         }, null, null);
+
 
 // 遍历 '$filesToLoad'，使用以上定义的闭包函数加载每个文件
         foreach ($filesToLoad as $fileIdentifier => $file) {

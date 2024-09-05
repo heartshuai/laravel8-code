@@ -5466,11 +5466,37 @@ class ComposerStaticInitc61ff82cbf0142a401a48a8161e1595a
 
     public static function getInitializer(ClassLoader $loader)
     {
+        // \Closure::bind() 创建并返回一个闭包，该闭包被绑定到指定的 $this 引用和类作用域。
+        // 闭包函数使用 use 从父作用域 "捕获" $loader 对象，并设置一些与类自动加载有关的属性。
+        // 参数说明：第一个参数是一个匿名函数，用于设定 $loader 的属性；
+        // 第二个参数指定绑定的对象，这里设置为 null，表示闭包中不能访问 $this；
+        // 第三个参数表示类作用域，这里设置为 `ClassLoader::class`，闭包在 `ClassLoader` 的作用域中执行。
         return \Closure::bind(function () use ($loader) {
+            // 设置类名前缀长度，用于PSR-4自动加载
             $loader->prefixLengthsPsr4 = ComposerStaticInitc61ff82cbf0142a401a48a8161e1595a::$prefixLengthsPsr4;
+            // 设置具有名字空间前缀的目录映射，用于PSR-4自动加载
             $loader->prefixDirsPsr4 = ComposerStaticInitc61ff82cbf0142a401a48a8161e1595a::$prefixDirsPsr4;
+            // 映射类名到文件路径，用户优化性能，避免了文件扫描
             $loader->classMap = ComposerStaticInitc61ff82cbf0142a401a48a8161e1595a::$classMap;
-
         }, null, ClassLoader::class);
+        #处理psr-4
+
+        /**
+         * 命名空间必须与绝对路径相映射。
+         * 类名必须与 .php 文件相映射。
+         * 命名空间和类名中的下划线 (_) 没有任何特殊意义。
+         * 命名空间分隔符和目录结构的目录分隔符必须一一对应。
+         */
+
+        /**
+         *
+         * PSR-4 是 PHP 的一种自动加载类的规范，全称为 PHP Standard Recommendations 4，由 PHP Framework Interoperability Group 提出，主要用于解决类库的自动加载问题。PSR-4 取代了 PSR-0 成为了新的自动加载标准。
+         * PSR-4 规范有以下特点：
+         * 命名空间与文件路径的对应关系：在 PSR-4 规范中，每个命名空间必须有一个顶级命名空间（也叫 "供应商命名空间"Vendor Namespace）。PHP 中的命名空间与物理的文件路径一一对应，例如命名空间 Foo\Bar 对应的路径是 Foo/Bar。
+         * 类名与文件名称的对应关系：简单来说，PSR-4 规定的是一个类一个文件，且类名（包括完整命名空间）与文件路径是一一对应的。举个例子，假如你有一个类 Foo\Bar\Baz，则它的文件路径应该是 /path/to/project/Foo/Bar/Baz.php。
+         * 注册自动加载函数：需要使用 spl_autoload_register() 函数注册自动加载函数，这个自动加载函数应该能接收一个参数（完整的类名，包括命名空间），并且根据这个类名加载相应的文件。
+         * 文件结构：PSR-4 鼓励使用目录存放命名空间的层级，这样能更好地组织代码。不同的供应商、包或者模块应该放在独立的目录中。
+         * 总的来说，遵循 PSR-4 规范的类库，你可以直接把类名拼接为文件路径来加载文件，不需要维护一个硬编码的文件路径和类名之间的映射关系。
+         */
     }
 }
