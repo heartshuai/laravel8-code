@@ -16,6 +16,7 @@ define('LARAVEL_START', microtime(true));
 |
 */
 
+#维护模式
 if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php')) {
     require $maintenance;
 }
