@@ -248,31 +248,26 @@ class Container implements ArrayAccess, ContainerContract
      */
     public function bind($abstract, $concrete = null, $shared = false)
     {
+        // 删除可能存在的旧实例
         $this->dropStaleInstances($abstract);
 
-        // If no concrete type was given, we will simply set the concrete type to the
-        // abstract type. After that, the concrete type to be registered as shared
-        // without being forced to state their classes in both of the parameters.
+        // 如果没有提供一个可用的具体实现（concrete），那么将抽象类型本身作为具体实现
         if (is_null($concrete)) {
             $concrete = $abstract;
         }
 
-        // If the factory is not a Closure, it means it is just a class name which is
-        // bound into this container to the abstract type and we will just wrap it
-        // up inside its own Closure to give us more convenience when extending.
+        // 如果 $concrete 不是一个闭包，那么将它作为类名把它封装在一个闭包里，以方便接下来的操作
         if (! $concrete instanceof Closure) {
             if (! is_string($concrete)) {
                 throw new TypeError(self::class.'::bind(): Argument #2 ($concrete) must be of type Closure|string|null');
             }
-
             $concrete = $this->getClosure($abstract, $concrete);
         }
 
+        // 设置绑定关系，并设置是否需要共享实例
         $this->bindings[$abstract] = compact('concrete', 'shared');
-
-        // If the abstract type was already resolved in this container we'll fire the
-        // rebound listener so that any objects which have already gotten resolved
-        // can have their copy of the object updated via the listener callbacks.
+        // 如果你正在尝试重新绑定一个已经解析过的类型，后面的代码会触发 rebound 操作
+        // 这样所有已经解析过该服务的地方都会收到更新
         if ($this->resolved($abstract)) {
             $this->rebound($abstract);
         }
@@ -287,11 +282,24 @@ class Container implements ArrayAccess, ContainerContract
      */
     protected function getClosure($abstract, $concrete)
     {
+        /*
+         * 函数返回一个闭包, 这个闭包接收两个参数,
+         * $container 就是 Laravel 服务容器本身
+         * $parameters 是实例化服务时的额外参数
+         */
         return function ($container, $parameters = []) use ($abstract, $concrete) {
+            /*
+             * 如果抽象服务名称与具体的类名是一样的，
+             * 我们可以直接实例化类
+             */
             if ($abstract == $concrete) {
                 return $container->build($concrete);
             }
 
+            /*
+             * 如果抽象服务名称与具体的类名不一样,
+             * 使用 resolve 方法来解析，实现接口依赖注入
+             */
             return $container->resolve(
                 $concrete, $parameters, $raiseEvents = false
             );
@@ -467,21 +475,27 @@ class Container implements ArrayAccess, ContainerContract
      */
     public function instance($abstract, $instance)
     {
+        // 移除已有的抽象类型别名。这主要用于处理存在别名的情况，
+        // 比如在容器中，我们可能会为某些类或者接口定义别名，以便后续方便获取
         $this->removeAbstractAlias($abstract);
 
+        // 检查给定的抽象类型是否已经在容器中注册过
         $isBound = $this->bound($abstract);
 
+        // 如果存在别名，将其删除
         unset($this->aliases[$abstract]);
 
-        // We'll check to determine if this type has been bound before, and if it has
-        // we will fire the rebound callbacks registered with the container and it
-        // can be updated with consuming classes that have gotten resolved here.
+        // 注册实例到容器中
         $this->instances[$abstract] = $instance;
 
+        // 如果该类型已经被绑定，那么重新绑定
+        // 这样可以触发 container 中的 rebound listeners，
+        // 确保容器中所有依赖这个抽象类型的地方都是最新的。
         if ($isBound) {
             $this->rebound($abstract);
         }
 
+        // 返回这个实例
         return $instance;
     }
 
@@ -606,8 +620,11 @@ class Container implements ArrayAccess, ContainerContract
      */
     protected function rebound($abstract)
     {
+        // 通过服务名称重新解析服务实例，如果这个服务在容器中存在，那么它会被重新实例化
         $instance = $this->make($abstract);
 
+        // 循环执行该服务的所有 rebound 回调。这些回调通常用于更新依赖了这个服务的各种内容
+        // $callback 是个回调函数，当绑定实例重新创建后，会依次执行所有的回调函数，通过将容器实例和新创建的绑定实例作为参数传递给回调函数
         foreach ($this->getReboundCallbacks($abstract) as $callback) {
             call_user_func($callback, $this, $instance);
         }
@@ -725,66 +742,63 @@ class Container implements ArrayAccess, ContainerContract
      */
     protected function resolve($abstract, $parameters = [], $raiseEvents = true)
     {
+
+        // 获取实际的类名或者别名
         $abstract = $this->getAlias($abstract);
 
-        // First we'll fire any event handlers which handle the "before" resolving of
-        // specific types. This gives some hooks the chance to add various extends
-        // calls to change the resolution of objects that they're interested in.
+        // 在创建实例“之前”触发事件
         if ($raiseEvents) {
             $this->fireBeforeResolvingCallbacks($abstract, $parameters);
         }
 
+        // 获取具有上下文绑定的服务提供者Concrete
         $concrete = $this->getContextualConcrete($abstract);
 
+        // 判断是否需要上下文构建（如果参数非空或者concrete不是null，判断为需要上下文构建）
         $needsContextualBuild = ! empty($parameters) || ! is_null($concrete);
 
-        // If an instance of the type is currently being managed as a singleton we'll
-        // just return an existing instance instead of instantiating new instances
-        // so the developer can keep using the same objects instance every time.
+        // 如果类在实例数组中已经存在，且不需要上下文构建（无参数无上下文），则返回已经存在的实例
         if (isset($this->instances[$abstract]) && ! $needsContextualBuild) {
             return $this->instances[$abstract];
         }
 
+        /* 处理参数数组 */
         $this->with[] = $parameters;
 
         if (is_null($concrete)) {
+            // 如果 $concrete 为 null, 则获取原服务名对应的 concrete
             $concrete = $this->getConcrete($abstract);
         }
 
-        // We're ready to instantiate an instance of the concrete type registered for
-        // the binding. This will instantiate the types, as well as resolve any of
-        // its "nested" dependencies recursively until all have gotten resolved.
+        // 判断是否可以创建一个实例，如果可以则创建，不可以则递归解析
         if ($this->isBuildable($concrete, $abstract)) {
             $object = $this->build($concrete);
         } else {
             $object = $this->make($concrete);
         }
 
-        // If we defined any extenders for this type, we'll need to spin through them
-        // and apply them to the object being built. This allows for the extension
-        // of services, such as changing configuration or decorating the object.
+        // 调用服务的"扩展器"，可以修改服务的行为
         foreach ($this->getExtenders($abstract) as $extender) {
             $object = $extender($object, $this);
         }
 
-        // If the requested type is registered as a singleton we'll want to cache off
-        // the instances in "memory" so we can return it later without creating an
-        // entirely new instance of an object on each subsequent request for it.
+        // 如果需要分享服务（单例），将解析出来的实例存储起来，下次直接使用
         if ($this->isShared($abstract) && ! $needsContextualBuild) {
             $this->instances[$abstract] = $object;
         }
 
         if ($raiseEvents) {
+            // 在实例创建“后”触发的事件
             $this->fireResolvingCallbacks($abstract, $object);
         }
 
-        // Before returning, we will also set the resolved flag to "true" and pop off
-        // the parameter overrides for this build. After those two things are done
-        // we will be ready to return back the fully constructed class instance.
+        // 标记该服务以解析
         $this->resolved[$abstract] = true;
 
+        // 处理完参数，删除最新添加的参数
         array_pop($this->with);
 
+        // 返回创建的对象
         return $object;
     }
 
@@ -1173,9 +1187,15 @@ class Container implements ArrayAccess, ContainerContract
      */
     protected function fireBeforeResolvingCallbacks($abstract, $parameters = [])
     {
+        #简单来说，Laravel 的服务容器允许你在解析出某个服务或类之前，执行一些特定的回调函数。这些回调函数可以通过 beforeResolving 方法注册，并且可以有全局的，也可以针对特定类的。在执行这些回调时，会将正在解析的服务名和传递给解析过程的参数一并传递给回调函数，以便在执行回调函数时可以使用到这些信息。
+
+
+        // 首先触发全局的 "before resolving" 回调函数
         $this->fireBeforeCallbackArray($abstract, $parameters, $this->globalBeforeResolvingCallbacks);
 
+        // 遍历所有的 "before resolving" 回调函数，查找匹配当前类名的回调函数
         foreach ($this->beforeResolvingCallbacks as $type => $callbacks) {
+            // 如果回调函数注册的类名与当前正在解析的类名相同，或者是其子类，则触发这组回调函数
             if ($type === $abstract || is_subclass_of($abstract, $type)) {
                 $this->fireBeforeCallbackArray($abstract, $parameters, $callbacks);
             }

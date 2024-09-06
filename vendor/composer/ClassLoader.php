@@ -481,7 +481,6 @@ class ClassLoader
 
         // 尝试找到拥有 '.php' 扩展名的类文件
         $file = $this->findFileWithExtension($class, '.php');
-        var_dump($file);die;
         // 如果上一步没有找到，并且当前在 HHVM 环境下运行，尝试找到拥有 '.hh' 扩展名的文件
         if (false === $file && defined('HHVM_VERSION')) {
             $file = $this->findFileWithExtension($class, '.hh');

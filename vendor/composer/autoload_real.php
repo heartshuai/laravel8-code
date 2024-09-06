@@ -57,7 +57,6 @@ class ComposerAutoloaderInitc61ff82cbf0142a401a48a8161e1595a
             }
         }, null, null);
 
-
 // 遍历 '$filesToLoad'，使用以上定义的闭包函数加载每个文件
         foreach ($filesToLoad as $fileIdentifier => $file) {
             $requireFile($fileIdentifier, $file);

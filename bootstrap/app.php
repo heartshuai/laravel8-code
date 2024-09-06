@@ -14,6 +14,7 @@
 $app = new Illuminate\Foundation\Application(
     $_ENV['APP_BASE_PATH'] ?? dirname(__DIR__)
 );
+//var_dump($app);die;
 
 /*
 |--------------------------------------------------------------------------
@@ -26,16 +27,17 @@ $app = new Illuminate\Foundation\Application(
 |
 */
 
+// 实例化 HTTP 的内核类，只会被实例化一次。之后再次请求这个服务，会返回之前的实例
 $app->singleton(
     Illuminate\Contracts\Http\Kernel::class,
     App\Http\Kernel::class
 );
-
+// 实例化 console 的内核类，只会被实例化一次。之后再次请求这个服务，会返回之前的实例
 $app->singleton(
     Illuminate\Contracts\Console\Kernel::class,
     App\Console\Kernel::class
 );
-
+// 实例化异常处理类，只会被实例化一次。之后再次请求这个服务，会返回之前的实例
 $app->singleton(
     Illuminate\Contracts\Debug\ExceptionHandler::class,
     App\Exceptions\Handler::class

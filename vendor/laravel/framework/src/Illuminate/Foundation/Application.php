@@ -169,12 +169,18 @@ class Application extends Container implements ApplicationContract, CachesConfig
      */
     public function __construct($basePath = null)
     {
+        // 如果构造函数传入了基础路径，就设置基础路径
         if ($basePath) {
             $this->setBasePath($basePath);
         }
 
+        // 注册基础的容器绑定。包括 Application 本身
         $this->registerBaseBindings();
+
+        // 注册基础服务供应者
         $this->registerBaseServiceProviders();
+
+        // 注册核心容器别名。例如：Application 容器别名为 "app"
         $this->registerCoreContainerAliases();
     }
 
@@ -195,16 +201,32 @@ class Application extends Container implements ApplicationContract, CachesConfig
      */
     protected function registerBaseBindings()
     {
+        // 设定 Application 实例，确保我们可以在全局范围访问应用实例
+        // 这特别有用，当我们需要访问容器时并无法注入，例如在辅助函数中
         static::setInstance($this);
 
+        // 使用 'app' 为别名，将当前的 Application 实例绑定到容器
+        // 这样我们可以通过 $app['app'] 来获取 Application 实例
         $this->instance('app', $this);
 
-        $this->instance(Container::class, $this);
+        // 將 Container 类本身也绑定到容器中
+        // 这有助于我们在其他地方需要从 IoC 容器中解析的时候，能够用 Container 类本身进行解析
+//        $this->instance(Container::class, $this);
+        // 绑定 Mix 类的单例，这主要是用于处理 Laravel Mix 的功能
         $this->singleton(Mix::class);
 
+        // 绑定 PackageManifest 类的单例
+        // Laravel 容器会按照 callback 的返回值生成一个单例
+        // PackageManifest 用于管理和读取 Laravel 的包清单，
+        // 维护的是与组件包相关的所有内容，包括：包提供的服务和与每个包关联的别名等
         $this->singleton(PackageManifest::class, function () {
             return new PackageManifest(
-                new Filesystem, $this->basePath(), $this->getCachedPackagesPath()
+            // 传入一个 Filesystem 实例
+                new Filesystem,
+                // 这是基础路径,即Laravel应用的基础路径
+                $this->basePath(),
+                // 缓存的包路径
+                $this->getCachedPackagesPath()
             );
         });
     }
@@ -216,8 +238,13 @@ class Application extends Container implements ApplicationContract, CachesConfig
      */
     protected function registerBaseServiceProviders()
     {
+        // 注册事件服务提供者，负责事件和监听器的注册以及调度
         $this->register(new EventServiceProvider($this));
+
+        // 注册日志服务提供者，用于设置和管理应用程序的日志系统
         $this->register(new LogServiceProvider($this));
+
+        // 注册路由服务提供者，负责注册路由组件包括路由器、URL生成器等
         $this->register(new RoutingServiceProvider($this));
     }
 
@@ -309,14 +336,23 @@ class Application extends Container implements ApplicationContract, CachesConfig
      */
     protected function bindPathsInContainer()
     {
+        // 将 'path' 绑定到应用的根目录
         $this->instance('path', $this->path());
+        // 将 'path.base' 绑定到 Laravel 安装的基础路径
         $this->instance('path.base', $this->basePath());
+        // 将 'path.lang' 绑定到应用的语言文件路径
         $this->instance('path.lang', $this->langPath());
+        // 将 'path.config' 绑定到应用的配置文件路径
         $this->instance('path.config', $this->configPath());
+        // 将 'path.public' 绑定到应用的公共文件路径
         $this->instance('path.public', $this->publicPath());
+        // 将 'path.storage' 绑定到应用的存储路径，比如session，cache文件等存放的地方
         $this->instance('path.storage', $this->storagePath());
+        // 将 'path.database' 绑定到应用的数据库路径
         $this->instance('path.database', $this->databasePath());
+        // 将 'path.resources' 绑定到应用的资源文件路径
         $this->instance('path.resources', $this->resourcePath());
+        // 将 'path.bootstrap' 绑定到应用的bootstrap文件路径
         $this->instance('path.bootstrap', $this->bootstrapPath());
     }
 
@@ -668,43 +704,42 @@ class Application extends Container implements ApplicationContract, CachesConfig
      */
     public function register($provider, $force = false)
     {
+        // 如果服务提供者已经注册，且未强制重新注册，先返回已注册的服务提供者
         if (($registered = $this->getProvider($provider)) && ! $force) {
             return $registered;
         }
 
-        // If the given "provider" is a string, we will resolve it, passing in the
-        // application instance automatically for the developer. This is simply
-        // a more convenient way of specifying your service provider classes.
+        // 如果传入的服务提供者是字符串，视为类名，实例化之后赋值给 $provider 变量
         if (is_string($provider)) {
             $provider = $this->resolveProvider($provider);
         }
 
+        // 在服务提供者类中调用 register 方法，执行服务的注册
         $provider->register();
 
-        // If there are bindings / singletons set as properties on the provider we
-        // will spin through them and register them with the application, which
-        // serves as a convenience layer while registering a lot of bindings.
+        // 如果服务提供者定义了 bindings 属性，遍历并调用容器的 bind 方法，进行服务绑定
         if (property_exists($provider, 'bindings')) {
             foreach ($provider->bindings as $key => $value) {
                 $this->bind($key, $value);
             }
         }
 
+        // 如果服务提供者定义了 singletons 属性，遍历并调用容器的 singleton 方法，进行单例服务绑定
         if (property_exists($provider, 'singletons')) {
             foreach ($provider->singletons as $key => $value) {
                 $this->singleton($key, $value);
             }
         }
 
+        // 将服务提供者做标记，表示已经注册过
         $this->markAsRegistered($provider);
 
-        // If the application has already booted, we will call this boot method on
-        // the provider class so it has an opportunity to do its boot logic and
-        // will be ready for any usage by this developer's application logic.
+        // 如果应用已经启动，将触发服务提供者的 boot 方法。该方法通常用于启动服务提供者的启动逻辑
         if ($this->isBooted()) {
             $this->bootProvider($provider);
         }
 
+        //返回注册的服务提供者
         return $provider;
     }
 
@@ -831,8 +866,11 @@ class Application extends Container implements ApplicationContract, CachesConfig
      */
     public function make($abstract, array $parameters = [])
     {
+        // 使用 getAlias 方法获取服务的真实别名
+        // 然后用加载的方法 loadDeferredProviderIfNeeded 加载可能的延迟服务提供者
         $this->loadDeferredProviderIfNeeded($abstract = $this->getAlias($abstract));
 
+        // 使用父类的 make 方法进行具体的服务创建操作，并返回结果
         return parent::make($abstract, $parameters);
     }
 
